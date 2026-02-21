@@ -126,6 +126,28 @@
   gap: 1rem;
 }
 
+.calendar-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.calendar-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.calendar-title select {
+  background: var(--panel-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.3rem 0.5rem;
+  color: var(--text);
+}
+
 .panel-header h2 {
   margin: 0;
   font-size: 1.2rem;
@@ -194,6 +216,18 @@
 
 .dot.journal {
   background: #22c55e;
+}
+
+.dot.finance-income {
+  background: #10b981;
+}
+
+.dot.finance-expense {
+  background: #f97316;
+}
+
+.dot.goal {
+  background: #facc15;
 }
 
 .calendar-footer {

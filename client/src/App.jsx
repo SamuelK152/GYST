@@ -118,10 +118,8 @@ function App() {
   const monthlyFinance = useMemo(() => {
     const [year, month] = selectedDate.split("-").map(Number);
     const currentMonthEntries = financeEntries.filter((entry) => {
-      const entryDate = new Date(entry.date);
-      return (
-        entryDate.getFullYear() === year && entryDate.getMonth() + 1 === month
-      );
+      const [entryYear, entryMonth] = entry.date.split("-").map(Number);
+      return entryYear === year && entryMonth === month;
     });
     const income = currentMonthEntries
       .filter((entry) => entry.type === "income")
@@ -137,6 +135,23 @@ function App() {
   }, [financeEntries, selectedDate]);
 
   const projection = monthlyFinance.net * 6;
+
+  const shiftMonth = (direction) => {
+    const [year, month, day] = selectedDate.split("-").map(Number);
+    const next = new Date(year, month - 1 + direction, day);
+    setSelectedDate(toISODate(next));
+  };
+
+  const updateYear = (value) => {
+    const [year, month, day] = selectedDate.split("-").map(Number);
+    const next = new Date(Number(value), month - 1, day);
+    setSelectedDate(toISODate(next));
+  };
+
+  const yearOptions = Array.from({ length: 7 }, (_, index) => {
+    const currentYear = Number(selectedDate.split("-")[0]);
+    return currentYear - 3 + index;
+  });
 
   const addTask = () => {
     if (!newTaskTitle.trim()) return;
@@ -387,15 +402,40 @@ function App() {
           <section className="panel calendar-panel">
             <div className="panel-header">
               <h2>Calendar</h2>
-              <p>
-                {calendar.year} •{" "}
-                {new Date(calendar.year, calendar.month - 1).toLocaleString(
-                  "en-US",
-                  {
-                    month: "long",
-                  },
-                )}
-              </p>
+              <div className="calendar-controls">
+                <button
+                  type="button"
+                  className="action-button ghost"
+                  onClick={() => shiftMonth(-1)}
+                >
+                  ◀
+                </button>
+                <div className="calendar-title">
+                  <span>
+                    {new Date(
+                      calendar.year,
+                      calendar.month - 1,
+                    ).toLocaleString("en-US", { month: "long" })}
+                  </span>
+                  <select
+                    value={calendar.year}
+                    onChange={(event) => updateYear(event.target.value)}
+                  >
+                    {yearOptions.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  className="action-button ghost"
+                  onClick={() => shiftMonth(1)}
+                >
+                  ▶
+                </button>
+              </div>
             </div>
             <div className="calendar-grid">
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
@@ -415,6 +455,15 @@ function App() {
                 const iso = toISODate(date);
                 const hasTasks = tasks.some((task) => task.date === iso);
                 const hasJournal = Boolean(journalEntries[iso]);
+                const hasIncome = financeEntries.some(
+                  (entry) => entry.date === iso && entry.type === "income",
+                );
+                const hasExpense = financeEntries.some(
+                  (entry) => entry.date === iso && entry.type === "expense",
+                );
+                const hasGoalDeadline = goals.some(
+                  (goal) => goal.targetDate === iso,
+                );
                 const isSelected = iso === selectedDate;
 
                 return (
@@ -428,6 +477,9 @@ function App() {
                     <div className="calendar-dots">
                       {hasTasks && <span className="dot task" />}
                       {hasJournal && <span className="dot journal" />}
+                      {hasIncome && <span className="dot finance-income" />}
+                      {hasExpense && <span className="dot finance-expense" />}
+                      {hasGoalDeadline && <span className="dot goal" />}
                     </div>
                   </button>
                 );
@@ -441,6 +493,15 @@ function App() {
                 </span>
                 <span>
                   <span className="dot journal" /> Journal
+                </span>
+                <span>
+                  <span className="dot finance-income" /> Income
+                </span>
+                <span>
+                  <span className="dot finance-expense" /> Expense
+                </span>
+                <span>
+                  <span className="dot goal" /> Goal deadline
                 </span>
               </div>
             </div>
