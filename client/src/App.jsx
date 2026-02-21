@@ -4,6 +4,77 @@ import "./App.css";
 function App() {
   const today = new Date();
   const toISODate = (date) => date.toISOString().split("T")[0];
+  const toUTCDate = (isoDate) => new Date(`${isoDate}T00:00:00Z`);
+  const formatDateParts = (year, month, day) =>
+    `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const monthsDiff = (start, target) =>
+    (target.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+    (target.getUTCMonth() - start.getUTCMonth());
+  const occursOnDate = (entry, targetDate) => {
+    if (!entry) return false;
+    const { date: startDate, recurrence, exceptions } = entry;
+    if (exceptions?.includes(targetDate)) return false;
+    if (!recurrence || recurrence.type === "once") {
+      return startDate === targetDate;
+    }
+
+    const start = toUTCDate(startDate);
+    const target = toUTCDate(targetDate);
+    const diffDays = Math.floor((target - start) / 86400000);
+    if (diffDays < 0) return false;
+
+    switch (recurrence.type) {
+      case "daily":
+        return true;
+      case "weekly":
+        return diffDays % 7 === 0;
+      case "monthly":
+        return (
+          target.getUTCDate() === start.getUTCDate() &&
+          monthsDiff(start, target) >= 0
+        );
+      case "yearly":
+        return (
+          target.getUTCDate() === start.getUTCDate() &&
+          target.getUTCMonth() === start.getUTCMonth()
+        );
+      case "every-x-days":
+        return diffDays % Math.max(1, recurrence.interval || 1) === 0;
+      case "every-x-weeks":
+        return diffDays % (7 * Math.max(1, recurrence.interval || 1)) === 0;
+      case "every-x-months":
+        return (
+          target.getUTCDate() === start.getUTCDate() &&
+          monthsDiff(start, target) % Math.max(1, recurrence.interval || 1) ===
+            0
+        );
+      default:
+        return startDate === targetDate;
+    }
+  };
+  const buildRecurrence = (type, interval) => {
+    if (type && type.startsWith("every-")) {
+      return { type, interval: Math.max(1, Number(interval) || 1) };
+    }
+    return { type: type || "once" };
+  };
+  const formatRecurrence = (recurrence) => {
+    if (!recurrence || recurrence.type === "once") return "One-time";
+    if (recurrence.type === "daily") return "Daily";
+    if (recurrence.type === "weekly") return "Weekly";
+    if (recurrence.type === "monthly") return "Monthly";
+    if (recurrence.type === "yearly") return "Yearly";
+    if (recurrence.type === "every-x-days") {
+      return `Every ${recurrence.interval || 1} days`;
+    }
+    if (recurrence.type === "every-x-weeks") {
+      return `Every ${recurrence.interval || 1} weeks`;
+    }
+    if (recurrence.type === "every-x-months") {
+      return `Every ${recurrence.interval || 1} months`;
+    }
+    return "One-time";
+  };
   const [selectedDate, setSelectedDate] = useState(toISODate(today));
   const [activeTab, setActiveTab] = useState("main");
 
@@ -14,6 +85,8 @@ function App() {
       date: toISODate(today),
       time: "09:00",
       completed: false,
+      recurrence: { type: "once" },
+      exceptions: [],
     },
     {
       id: 2,
@@ -21,6 +94,8 @@ function App() {
       date: toISODate(today),
       time: "18:30",
       completed: true,
+      recurrence: { type: "weekly" },
+      exceptions: [],
     },
     {
       id: 3,
@@ -30,6 +105,8 @@ function App() {
       ),
       time: "12:00",
       completed: false,
+      recurrence: { type: "once" },
+      exceptions: [],
     },
   ]);
 
@@ -50,6 +127,8 @@ function App() {
       amount: 3200,
       category: "Salary",
       date: toISODate(new Date(today.getFullYear(), today.getMonth(), 1)),
+      recurrence: { type: "monthly" },
+      exceptions: [],
     },
     {
       id: 2,
@@ -57,6 +136,8 @@ function App() {
       amount: 860,
       category: "Housing",
       date: toISODate(new Date(today.getFullYear(), today.getMonth(), 5)),
+      recurrence: { type: "monthly" },
+      exceptions: [],
     },
     {
       id: 3,
@@ -64,33 +145,69 @@ function App() {
       amount: 240,
       category: "Food",
       date: toISODate(new Date(today.getFullYear(), today.getMonth(), 10)),
+      recurrence: { type: "weekly" },
+      exceptions: [],
     },
   ]);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskTime, setNewTaskTime] = useState("");
+  const [newTaskRecurrenceType, setNewTaskRecurrenceType] = useState("once");
+  const [newTaskRecurrenceInterval, setNewTaskRecurrenceInterval] =
+    useState("2");
   const [newGoalTitle, setNewGoalTitle] = useState("");
   const [newGoalDate, setNewGoalDate] = useState("");
   const [newFinanceType, setNewFinanceType] = useState("expense");
   const [newFinanceAmount, setNewFinanceAmount] = useState("");
   const [newFinanceCategory, setNewFinanceCategory] = useState("");
-  const [editingTaskId, setEditingTaskId] = useState(null);
-  const [taskDraft, setTaskDraft] = useState({ title: "", time: "" });
-  const [editingGoalId, setEditingGoalId] = useState(null);
+  const [newFinanceRecurrenceType, setNewFinanceRecurrenceType] =
+    useState("once");
+  const [newFinanceRecurrenceInterval, setNewFinanceRecurrenceInterval] =
+    useState("2");
+  const [editModal, setEditModal] = useState(null);
+  const [taskDraft, setTaskDraft] = useState({
+    title: "",
+    time: "",
+    recurrenceType: "once",
+    recurrenceInterval: "2",
+    sourceId: null,
+    isRecurringInstance: false,
+  });
   const [goalDraft, setGoalDraft] = useState({
     title: "",
     targetDate: "",
     progress: 0,
+    sourceId: null,
   });
-  const [editingFinanceId, setEditingFinanceId] = useState(null);
   const [financeDraft, setFinanceDraft] = useState({
     type: "expense",
     amount: "",
     category: "",
     date: "",
+    recurrenceType: "once",
+    recurrenceInterval: "2",
+    sourceId: null,
+    isRecurringInstance: false,
   });
 
-  const selectedTasks = tasks.filter((task) => task.date === selectedDate);
+  const selectedTasks = useMemo(() => {
+    const instances = [];
+    tasks.forEach((task) => {
+      if (occursOnDate(task, selectedDate)) {
+        const isRecurringInstance = task.recurrence?.type !== "once";
+        instances.push({
+          ...task,
+          instanceId: isRecurringInstance
+            ? `${task.id}-${selectedDate}`
+            : String(task.id),
+          sourceId: task.id,
+          isRecurringInstance,
+          date: selectedDate,
+        });
+      }
+    });
+    return instances;
+  }, [tasks, selectedDate]);
   const selectedJournal = journalEntries[selectedDate] ?? "";
 
   const calendar = useMemo(() => {
@@ -117,21 +234,53 @@ function App() {
 
   const monthlyFinance = useMemo(() => {
     const [year, month] = selectedDate.split("-").map(Number);
-    const currentMonthEntries = financeEntries.filter((entry) => {
-      const [entryYear, entryMonth] = entry.date.split("-").map(Number);
-      return entryYear === year && entryMonth === month;
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    let income = 0;
+    let expense = 0;
+
+    financeEntries.forEach((entry) => {
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        const date = formatDateParts(year, month, day);
+        if (occursOnDate(entry, date)) {
+          if (entry.type === "income") {
+            income += entry.amount;
+          } else {
+            expense += entry.amount;
+          }
+        }
+      }
     });
-    const income = currentMonthEntries
-      .filter((entry) => entry.type === "income")
-      .reduce((sum, entry) => sum + entry.amount, 0);
-    const expense = currentMonthEntries
-      .filter((entry) => entry.type === "expense")
-      .reduce((sum, entry) => sum + entry.amount, 0);
     return {
       income,
       expense,
       net: income - expense,
     };
+  }, [financeEntries, selectedDate]);
+
+  const financeInstancesForMonth = useMemo(() => {
+    const [year, month] = selectedDate.split("-").map(Number);
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const instances = [];
+
+    financeEntries.forEach((entry) => {
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        const date = formatDateParts(year, month, day);
+        if (occursOnDate(entry, date)) {
+          const isRecurringInstance = entry.recurrence?.type !== "once";
+          instances.push({
+            ...entry,
+            instanceId: isRecurringInstance
+              ? `${entry.id}-${date}`
+              : String(entry.id),
+            sourceId: entry.id,
+            isRecurringInstance,
+            date,
+          });
+        }
+      }
+    });
+
+    return instances.sort((a, b) => b.date.localeCompare(a.date));
   }, [financeEntries, selectedDate]);
 
   const projection = monthlyFinance.net * 6;
@@ -162,47 +311,118 @@ function App() {
         date: selectedDate,
         time: newTaskTime || "Anytime",
         completed: false,
+        recurrence: buildRecurrence(
+          newTaskRecurrenceType,
+          newTaskRecurrenceInterval,
+        ),
+        exceptions: [],
       },
       ...prev,
     ]);
     setNewTaskTitle("");
     setNewTaskTime("");
+    setNewTaskRecurrenceType("once");
+    setNewTaskRecurrenceInterval("2");
   };
 
-  const toggleTask = (taskId) => {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId ? { ...task, completed: !task.completed } : task,
-      ),
-    );
-  };
-
-  const startEditTask = (task) => {
-    setEditingTaskId(task.id);
-    setTaskDraft({
-      title: task.title,
-      time: task.time === "Anytime" ? "" : task.time || "",
-    });
-  };
-
-  const saveTask = (taskId) => {
-    if (!taskDraft.title.trim()) return;
+  const addTaskException = (taskId, date) => {
     setTasks((prev) =>
       prev.map((task) =>
         task.id === taskId
           ? {
               ...task,
-              title: taskDraft.title.trim(),
-              time: taskDraft.time || "Anytime",
+              exceptions: Array.from(
+                new Set([...(task.exceptions || []), date]),
+              ),
             }
           : task,
       ),
     );
-    setEditingTaskId(null);
   };
 
-  const deleteTask = (taskId) => {
-    setTasks((prev) => prev.filter((task) => task.id !== taskId));
+  const addOneTimeTaskFromInstance = (instance, overrides = {}) => {
+    setTasks((prev) => [
+      {
+        id: Date.now(),
+        title: overrides.title ?? instance.title,
+        date: overrides.date ?? instance.date,
+        time: overrides.time ?? instance.time,
+        completed: overrides.completed ?? instance.completed,
+        recurrence: { type: "once" },
+        exceptions: [],
+      },
+      ...prev,
+    ]);
+  };
+
+  const toggleTask = (task) => {
+    if (task.isRecurringInstance) {
+      addTaskException(task.sourceId, task.date);
+      addOneTimeTaskFromInstance(task, { completed: !task.completed });
+      return;
+    }
+    setTasks((prev) =>
+      prev.map((item) =>
+        item.id === task.sourceId
+          ? { ...item, completed: !item.completed }
+          : item,
+      ),
+    );
+  };
+
+  const closeModal = () => {
+    setEditModal(null);
+  };
+
+  const openTaskModal = (task) => {
+    setEditModal({ type: "task", entity: task });
+    setTaskDraft({
+      title: task.title,
+      time: task.time === "Anytime" ? "" : task.time || "",
+      recurrenceType: task.recurrence?.type || "once",
+      recurrenceInterval: String(task.recurrence?.interval || 2),
+      sourceId: task.sourceId,
+      isRecurringInstance: task.isRecurringInstance,
+    });
+  };
+
+  const saveTask = () => {
+    if (!taskDraft.title.trim()) return;
+    if (taskDraft.isRecurringInstance) {
+      addTaskException(taskDraft.sourceId, selectedDate);
+      addOneTimeTaskFromInstance({
+        title: taskDraft.title.trim(),
+        time: taskDraft.time || "Anytime",
+        date: selectedDate,
+        completed: false,
+      });
+      closeModal();
+      return;
+    }
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === taskDraft.sourceId
+          ? {
+              ...task,
+              title: taskDraft.title.trim(),
+              time: taskDraft.time || "Anytime",
+              recurrence: buildRecurrence(
+                taskDraft.recurrenceType,
+                taskDraft.recurrenceInterval,
+              ),
+            }
+          : task,
+      ),
+    );
+    closeModal();
+  };
+
+  const deleteTask = (task) => {
+    if (task.isRecurringInstance) {
+      addTaskException(task.sourceId, task.date);
+      return;
+    }
+    setTasks((prev) => prev.filter((item) => item.id !== task.sourceId));
   };
 
   const addGoal = () => {
@@ -227,21 +447,22 @@ function App() {
     );
   };
 
-  const startEditGoal = (goal) => {
-    setEditingGoalId(goal.id);
+  const openGoalModal = (goal) => {
+    setEditModal({ type: "goal", entity: goal });
     setGoalDraft({
       title: goal.title,
       targetDate: goal.targetDate,
       progress: goal.progress,
+      sourceId: goal.id,
     });
   };
 
-  const saveGoal = (goalId) => {
+  const saveGoal = () => {
     if (!goalDraft.title.trim() || !goalDraft.targetDate) return;
     const progress = Math.min(100, Math.max(0, Number(goalDraft.progress)));
     setGoals((prev) =>
       prev.map((goal) =>
-        goal.id === goalId
+        goal.id === goalDraft.sourceId
           ? {
               ...goal,
               title: goalDraft.title.trim(),
@@ -251,7 +472,7 @@ function App() {
           : goal,
       ),
     );
-    setEditingGoalId(null);
+    closeModal();
   };
 
   const deleteGoal = (goalId) => {
@@ -275,44 +496,114 @@ function App() {
         amount,
         category: newFinanceCategory.trim(),
         date: selectedDate,
+        recurrence: buildRecurrence(
+          newFinanceRecurrenceType,
+          newFinanceRecurrenceInterval,
+        ),
+        exceptions: [],
       },
       ...prev,
     ]);
     setNewFinanceAmount("");
     setNewFinanceCategory("");
+    setNewFinanceRecurrenceType("once");
+    setNewFinanceRecurrenceInterval("2");
   };
 
-  const startEditFinance = (entry) => {
-    setEditingFinanceId(entry.id);
+  const openFinanceModal = (entry) => {
+    setEditModal({ type: "finance", entity: entry });
     setFinanceDraft({
       type: entry.type,
       amount: String(entry.amount),
       category: entry.category,
       date: entry.date,
+      recurrenceType: entry.recurrence?.type || "once",
+      recurrenceInterval: String(entry.recurrence?.interval || 2),
+      sourceId: entry.sourceId,
+      isRecurringInstance: entry.isRecurringInstance,
     });
   };
 
-  const saveFinance = (entryId) => {
-    const amount = Number(financeDraft.amount);
-    if (!amount || !financeDraft.category.trim() || !financeDraft.date) return;
+  const addFinanceException = (entryId, date) => {
     setFinanceEntries((prev) =>
       prev.map((entry) =>
         entry.id === entryId
+          ? {
+              ...entry,
+              exceptions: Array.from(
+                new Set([...(entry.exceptions || []), date]),
+              ),
+            }
+          : entry,
+      ),
+    );
+  };
+
+  const addOneTimeFinanceFromInstance = (instance, overrides = {}) => {
+    setFinanceEntries((prev) => [
+      {
+        id: Date.now(),
+        type: overrides.type ?? instance.type,
+        amount: overrides.amount ?? instance.amount,
+        category: overrides.category ?? instance.category,
+        date: overrides.date ?? instance.date,
+        recurrence: { type: "once" },
+        exceptions: [],
+      },
+      ...prev,
+    ]);
+  };
+
+  const saveFinance = () => {
+    const amount = Number(financeDraft.amount);
+    if (!amount || !financeDraft.category.trim() || !financeDraft.date) return;
+    if (financeDraft.isRecurringInstance) {
+      addFinanceException(financeDraft.sourceId, financeDraft.date);
+      addOneTimeFinanceFromInstance(
+        {
+          type: financeDraft.type,
+          amount,
+          category: financeDraft.category.trim(),
+          date: financeDraft.date,
+        },
+        {
+          type: financeDraft.type,
+          amount,
+          category: financeDraft.category.trim(),
+          date: financeDraft.date,
+        },
+      );
+      closeModal();
+      return;
+    }
+    setFinanceEntries((prev) =>
+      prev.map((entry) =>
+        entry.id === financeDraft.sourceId
           ? {
               ...entry,
               type: financeDraft.type,
               amount,
               category: financeDraft.category.trim(),
               date: financeDraft.date,
+              recurrence: buildRecurrence(
+                financeDraft.recurrenceType,
+                financeDraft.recurrenceInterval,
+              ),
             }
           : entry,
       ),
     );
-    setEditingFinanceId(null);
+    closeModal();
   };
 
-  const deleteFinance = (entryId) => {
-    setFinanceEntries((prev) => prev.filter((entry) => entry.id !== entryId));
+  const deleteFinance = (entry) => {
+    if (entry.isRecurringInstance) {
+      addFinanceException(entry.sourceId, entry.date);
+      return;
+    }
+    setFinanceEntries((prev) =>
+      prev.filter((item) => item.id !== entry.sourceId),
+    );
   };
 
   const formatCurrency = (value) =>
@@ -412,10 +703,10 @@ function App() {
                 </button>
                 <div className="calendar-title">
                   <span>
-                    {new Date(
-                      calendar.year,
-                      calendar.month - 1,
-                    ).toLocaleString("en-US", { month: "long" })}
+                    {new Date(calendar.year, calendar.month - 1).toLocaleString(
+                      "en-US",
+                      { month: "long" },
+                    )}
                   </span>
                   <select
                     value={calendar.year}
@@ -453,13 +744,15 @@ function App() {
                   );
                 }
                 const iso = toISODate(date);
-                const hasTasks = tasks.some((task) => task.date === iso);
+                const hasTasks = tasks.some((task) => occursOnDate(task, iso));
                 const hasJournal = Boolean(journalEntries[iso]);
                 const hasIncome = financeEntries.some(
-                  (entry) => entry.date === iso && entry.type === "income",
+                  (entry) =>
+                    entry.type === "income" && occursOnDate(entry, iso),
                 );
                 const hasExpense = financeEntries.some(
-                  (entry) => entry.date === iso && entry.type === "expense",
+                  (entry) =>
+                    entry.type === "expense" && occursOnDate(entry, iso),
                 );
                 const hasGoalDeadline = goals.some(
                   (goal) => goal.targetDate === iso,
@@ -530,82 +823,71 @@ function App() {
                 Add
               </button>
             </div>
+            <div className="input-row recurrence-row">
+              <select
+                value={newTaskRecurrenceType}
+                onChange={(event) =>
+                  setNewTaskRecurrenceType(event.target.value)
+                }
+              >
+                <option value="once">One-time</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+                <option value="every-x-days">Every X days</option>
+                <option value="every-x-weeks">Every X weeks</option>
+                <option value="every-x-months">Every X months</option>
+              </select>
+              {newTaskRecurrenceType.startsWith("every-") && (
+                <input
+                  type="number"
+                  min="1"
+                  value={newTaskRecurrenceInterval}
+                  onChange={(event) =>
+                    setNewTaskRecurrenceInterval(event.target.value)
+                  }
+                  placeholder="Interval"
+                />
+              )}
+              <span className="helper">
+                {formatRecurrence(
+                  buildRecurrence(
+                    newTaskRecurrenceType,
+                    newTaskRecurrenceInterval,
+                  ),
+                )}
+              </span>
+            </div>
             <ul className="task-list">
               {selectedTasks.length === 0 && (
                 <li className="empty-state">No tasks yet. Add one above.</li>
               )}
               {selectedTasks.map((task) => (
-                <li key={task.id} className={task.completed ? "completed" : ""}>
-                  {editingTaskId === task.id ? (
-                    <div className="edit-row">
-                      <input
-                        type="text"
-                        value={taskDraft.title}
-                        onChange={(event) =>
-                          setTaskDraft((prev) => ({
-                            ...prev,
-                            title: event.target.value,
-                          }))
-                        }
-                      />
-                      <input
-                        type="time"
-                        value={taskDraft.time}
-                        onChange={(event) =>
-                          setTaskDraft((prev) => ({
-                            ...prev,
-                            time: event.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  ) : (
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={task.completed}
-                        onChange={() => toggleTask(task.id)}
-                      />
-                      <span>{task.title}</span>
-                    </label>
-                  )}
+                <li
+                  key={task.instanceId}
+                  className={task.completed ? "completed" : ""}
+                >
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={task.completed}
+                      onChange={() => toggleTask(task)}
+                    />
+                    <span>{task.title}</span>
+                  </label>
                   <div className="item-actions">
-                    {editingTaskId === task.id ? (
-                      <>
-                        <button
-                          type="button"
-                          className="action-button primary"
-                          onClick={() => saveTask(task.id)}
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          className="action-button ghost"
-                          onClick={() => setEditingTaskId(null)}
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="pill">{task.time}</span>
-                        <button
-                          type="button"
-                          className="action-button ghost"
-                          onClick={() => startEditTask(task)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="action-button danger"
-                          onClick={() => deleteTask(task.id)}
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
+                    <span className="pill">{task.time}</span>
+                    <span className="pill secondary">
+                      {formatRecurrence(task.recurrence)}
+                    </span>
+                    <button
+                      type="button"
+                      className="action-button ghost"
+                      onClick={() => openTaskModal(task)}
+                    >
+                      Edit
+                    </button>
                   </div>
                 </li>
               ))}
@@ -638,100 +920,29 @@ function App() {
             <div className="goal-list">
               {goals.map((goal) => (
                 <div key={goal.id} className="goal-card">
-                  {editingGoalId === goal.id ? (
-                    <div className="goal-edit">
-                      <input
-                        type="text"
-                        value={goalDraft.title}
-                        onChange={(event) =>
-                          setGoalDraft((prev) => ({
-                            ...prev,
-                            title: event.target.value,
-                          }))
-                        }
-                      />
-                      <input
-                        type="date"
-                        value={goalDraft.targetDate}
-                        onChange={(event) =>
-                          setGoalDraft((prev) => ({
-                            ...prev,
-                            targetDate: event.target.value,
-                          }))
-                        }
-                      />
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={goalDraft.progress}
-                        onChange={(event) =>
-                          setGoalDraft((prev) => ({
-                            ...prev,
-                            progress: event.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  ) : (
-                    <div>
-                      <h3>{goal.title}</h3>
-                      <p>Target {goal.targetDate}</p>
-                    </div>
-                  )}
+                  <div>
+                    <h3>{goal.title}</h3>
+                    <p>Target {goal.targetDate}</p>
+                  </div>
                   <div className="goal-progress">
-                    {editingGoalId === goal.id ? (
-                      <span>{goalDraft.progress}%</span>
-                    ) : (
-                      <>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={goal.progress}
-                          onChange={(event) =>
-                            updateGoalProgress(goal.id, event.target.value)
-                          }
-                        />
-                        <span>{goal.progress}%</span>
-                      </>
-                    )}
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={goal.progress}
+                      onChange={(event) =>
+                        updateGoalProgress(goal.id, event.target.value)
+                      }
+                    />
+                    <span>{goal.progress}%</span>
                     <div className="item-actions">
-                      {editingGoalId === goal.id ? (
-                        <>
-                          <button
-                            type="button"
-                            className="action-button primary"
-                            onClick={() => saveGoal(goal.id)}
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            className="action-button ghost"
-                            onClick={() => setEditingGoalId(null)}
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            className="action-button ghost"
-                            onClick={() => startEditGoal(goal)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="action-button danger"
-                            onClick={() => deleteGoal(goal.id)}
-                          >
-                            Delete
-                          </button>
-                        </>
-                      )}
+                      <button
+                        type="button"
+                        className="action-button ghost"
+                        onClick={() => openGoalModal(goal)}
+                      >
+                        Edit
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -806,104 +1017,66 @@ function App() {
                 Add
               </button>
             </div>
+            <div className="input-row recurrence-row">
+              <select
+                value={newFinanceRecurrenceType}
+                onChange={(event) =>
+                  setNewFinanceRecurrenceType(event.target.value)
+                }
+              >
+                <option value="once">One-time</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+                <option value="every-x-days">Every X days</option>
+                <option value="every-x-weeks">Every X weeks</option>
+                <option value="every-x-months">Every X months</option>
+              </select>
+              {newFinanceRecurrenceType.startsWith("every-") && (
+                <input
+                  type="number"
+                  min="1"
+                  value={newFinanceRecurrenceInterval}
+                  onChange={(event) =>
+                    setNewFinanceRecurrenceInterval(event.target.value)
+                  }
+                  placeholder="Interval"
+                />
+              )}
+              <span className="helper">
+                {formatRecurrence(
+                  buildRecurrence(
+                    newFinanceRecurrenceType,
+                    newFinanceRecurrenceInterval,
+                  ),
+                )}
+              </span>
+            </div>
             <ul className="finance-list">
-              {financeEntries.map((entry) => (
-                <li key={entry.id}>
-                  {editingFinanceId === entry.id ? (
-                    <div className="edit-row">
-                      <select
-                        value={financeDraft.type}
-                        onChange={(event) =>
-                          setFinanceDraft((prev) => ({
-                            ...prev,
-                            type: event.target.value,
-                          }))
-                        }
-                      >
-                        <option value="expense">Expense</option>
-                        <option value="income">Income</option>
-                      </select>
-                      <input
-                        type="number"
-                        value={financeDraft.amount}
-                        onChange={(event) =>
-                          setFinanceDraft((prev) => ({
-                            ...prev,
-                            amount: event.target.value,
-                          }))
-                        }
-                      />
-                      <input
-                        type="text"
-                        value={financeDraft.category}
-                        onChange={(event) =>
-                          setFinanceDraft((prev) => ({
-                            ...prev,
-                            category: event.target.value,
-                          }))
-                        }
-                      />
-                      <input
-                        type="date"
-                        value={financeDraft.date}
-                        onChange={(event) =>
-                          setFinanceDraft((prev) => ({
-                            ...prev,
-                            date: event.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  ) : (
-                    <div>
-                      <strong>{entry.category}</strong>
-                      <span>{entry.date}</span>
-                    </div>
-                  )}
+              {financeInstancesForMonth.map((entry) => (
+                <li key={entry.instanceId}>
+                  <div>
+                    <strong>{entry.category}</strong>
+                    <span>{entry.date}</span>
+                    <span className="pill secondary">
+                      {formatRecurrence(entry.recurrence)}
+                    </span>
+                  </div>
                   <div className="item-actions">
-                    {editingFinanceId === entry.id ? (
-                      <>
-                        <button
-                          type="button"
-                          className="action-button primary"
-                          onClick={() => saveFinance(entry.id)}
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          className="action-button ghost"
-                          onClick={() => setEditingFinanceId(null)}
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <span
-                          className={
-                            entry.type === "income" ? "income" : "expense"
-                          }
-                        >
-                          {entry.type === "income" ? "+" : "-"}
-                          {formatCurrency(entry.amount)}
-                        </span>
-                        <button
-                          type="button"
-                          className="action-button ghost"
-                          onClick={() => startEditFinance(entry)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="action-button danger"
-                          onClick={() => deleteFinance(entry.id)}
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
+                    <span
+                      className={entry.type === "income" ? "income" : "expense"}
+                    >
+                      {entry.type === "income" ? "+" : "-"}
+                      {formatCurrency(entry.amount)}
+                    </span>
+                    <button
+                      type="button"
+                      className="action-button ghost"
+                      onClick={() => openFinanceModal(entry)}
+                    >
+                      Edit
+                    </button>
                   </div>
                 </li>
               ))}
@@ -911,6 +1084,261 @@ function App() {
           </section>
         )}
       </main>
+
+      {editModal && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal">
+            <header className="modal-header">
+              <h3>
+                {editModal.type === "task" && "Edit task"}
+                {editModal.type === "goal" && "Edit goal"}
+                {editModal.type === "finance" && "Edit finance entry"}
+              </h3>
+              <button
+                type="button"
+                className="action-button ghost"
+                onClick={closeModal}
+              >
+                Close
+              </button>
+            </header>
+            <div className="modal-body">
+              {editModal.type === "task" && (
+                <>
+                  {taskDraft.isRecurringInstance && (
+                    <p className="helper">
+                      Editing a recurring instance will create a one-time entry
+                      for {selectedDate}.
+                    </p>
+                  )}
+                  <input
+                    type="text"
+                    value={taskDraft.title}
+                    onChange={(event) =>
+                      setTaskDraft((prev) => ({
+                        ...prev,
+                        title: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    type="time"
+                    value={taskDraft.time}
+                    onChange={(event) =>
+                      setTaskDraft((prev) => ({
+                        ...prev,
+                        time: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="modal-row">
+                    <select
+                      value={taskDraft.recurrenceType}
+                      onChange={(event) =>
+                        setTaskDraft((prev) => ({
+                          ...prev,
+                          recurrenceType: event.target.value,
+                        }))
+                      }
+                      disabled={taskDraft.isRecurringInstance}
+                    >
+                      <option value="once">One-time</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="yearly">Yearly</option>
+                      <option value="every-x-days">Every X days</option>
+                      <option value="every-x-weeks">Every X weeks</option>
+                      <option value="every-x-months">Every X months</option>
+                    </select>
+                    {taskDraft.recurrenceType.startsWith("every-") && (
+                      <input
+                        type="number"
+                        min="1"
+                        value={taskDraft.recurrenceInterval}
+                        onChange={(event) =>
+                          setTaskDraft((prev) => ({
+                            ...prev,
+                            recurrenceInterval: event.target.value,
+                          }))
+                        }
+                        disabled={taskDraft.isRecurringInstance}
+                      />
+                    )}
+                  </div>
+                </>
+              )}
+
+              {editModal.type === "goal" && (
+                <>
+                  <input
+                    type="text"
+                    value={goalDraft.title}
+                    onChange={(event) =>
+                      setGoalDraft((prev) => ({
+                        ...prev,
+                        title: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    type="date"
+                    value={goalDraft.targetDate}
+                    onChange={(event) =>
+                      setGoalDraft((prev) => ({
+                        ...prev,
+                        targetDate: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={goalDraft.progress}
+                    onChange={(event) =>
+                      setGoalDraft((prev) => ({
+                        ...prev,
+                        progress: event.target.value,
+                      }))
+                    }
+                  />
+                </>
+              )}
+
+              {editModal.type === "finance" && (
+                <>
+                  {financeDraft.isRecurringInstance && (
+                    <p className="helper">
+                      Editing a recurring instance will create a one-time entry
+                      for {financeDraft.date}.
+                    </p>
+                  )}
+                  <div className="modal-row">
+                    <select
+                      value={financeDraft.type}
+                      onChange={(event) =>
+                        setFinanceDraft((prev) => ({
+                          ...prev,
+                          type: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="expense">Expense</option>
+                      <option value="income">Income</option>
+                    </select>
+                    <input
+                      type="number"
+                      value={financeDraft.amount}
+                      onChange={(event) =>
+                        setFinanceDraft((prev) => ({
+                          ...prev,
+                          amount: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={financeDraft.category}
+                    onChange={(event) =>
+                      setFinanceDraft((prev) => ({
+                        ...prev,
+                        category: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    type="date"
+                    value={financeDraft.date}
+                    onChange={(event) =>
+                      setFinanceDraft((prev) => ({
+                        ...prev,
+                        date: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="modal-row">
+                    <select
+                      value={financeDraft.recurrenceType}
+                      onChange={(event) =>
+                        setFinanceDraft((prev) => ({
+                          ...prev,
+                          recurrenceType: event.target.value,
+                        }))
+                      }
+                      disabled={financeDraft.isRecurringInstance}
+                    >
+                      <option value="once">One-time</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="yearly">Yearly</option>
+                      <option value="every-x-days">Every X days</option>
+                      <option value="every-x-weeks">Every X weeks</option>
+                      <option value="every-x-months">Every X months</option>
+                    </select>
+                    {financeDraft.recurrenceType.startsWith("every-") && (
+                      <input
+                        type="number"
+                        min="1"
+                        value={financeDraft.recurrenceInterval}
+                        onChange={(event) =>
+                          setFinanceDraft((prev) => ({
+                            ...prev,
+                            recurrenceInterval: event.target.value,
+                          }))
+                        }
+                        disabled={financeDraft.isRecurringInstance}
+                      />
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="action-button danger"
+                onClick={() => {
+                  if (editModal.type === "task") {
+                    deleteTask(editModal.entity);
+                  }
+                  if (editModal.type === "goal") {
+                    deleteGoal(editModal.entity.id);
+                  }
+                  if (editModal.type === "finance") {
+                    deleteFinance(editModal.entity);
+                  }
+                  closeModal();
+                }}
+              >
+                Delete
+              </button>
+              <div className="modal-actions-right">
+                <button
+                  type="button"
+                  className="action-button ghost"
+                  onClick={closeModal}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="action-button primary"
+                  onClick={() => {
+                    if (editModal.type === "task") saveTask();
+                    if (editModal.type === "goal") saveGoal();
+                    if (editModal.type === "finance") saveFinance();
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
