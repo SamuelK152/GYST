@@ -385,6 +385,14 @@ function App() {
       isRecurringInstance: task.isRecurringInstance,
     });
   };
+  
+  const openNewTaskModal = () => {
+    setNewTaskTitle("");
+    setNewTaskTime("");
+    setNewTaskRecurrenceType("once");
+    setNewTaskRecurrenceInterval("2");
+    setEditModal({ type: "new-task" });
+  };
 
   const saveTask = () => {
     if (!taskDraft.title.trim()) return;
@@ -456,6 +464,12 @@ function App() {
       sourceId: goal.id,
     });
   };
+  
+  const openNewGoalModal = () => {
+    setNewGoalTitle("");
+    setNewGoalDate("");
+    setEditModal({ type: "new-goal" });
+  };
 
   const saveGoal = () => {
     if (!goalDraft.title.trim() || !goalDraft.targetDate) return;
@@ -522,6 +536,15 @@ function App() {
       sourceId: entry.sourceId,
       isRecurringInstance: entry.isRecurringInstance,
     });
+  };
+  
+  const openNewFinanceModal = () => {
+    setNewFinanceType("expense");
+    setNewFinanceAmount("");
+    setNewFinanceCategory("");
+    setNewFinanceRecurrenceType("once");
+    setNewFinanceRecurrenceInterval("2");
+    setEditModal({ type: "new-finance" });
   };
 
   const addFinanceException = (entryId, date) => {
@@ -804,60 +827,17 @@ function App() {
         {(activeTab === "main" || activeTab === "tasks") && (
           <section className="panel">
             <div className="panel-header">
-              <h2>To-do list</h2>
-              <p>{selectedDate}</p>
-            </div>
-            <div className="input-row">
-              <input
-                type="text"
-                placeholder="Add a task"
-                value={newTaskTitle}
-                onChange={(event) => setNewTaskTitle(event.target.value)}
-              />
-              <input
-                type="time"
-                value={newTaskTime}
-                onChange={(event) => setNewTaskTime(event.target.value)}
-              />
-              <button className="primary" onClick={addTask}>
-                Add
-              </button>
-            </div>
-            <div className="input-row recurrence-row">
-              <select
-                value={newTaskRecurrenceType}
-                onChange={(event) =>
-                  setNewTaskRecurrenceType(event.target.value)
-                }
+              <div>
+                <h2>To-do list</h2>
+                <p>{selectedDate}</p>
+              </div>
+              <button
+                type="button"
+                className="action-button primary"
+                onClick={openNewTaskModal}
               >
-                <option value="once">One-time</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-                <option value="every-x-days">Every X days</option>
-                <option value="every-x-weeks">Every X weeks</option>
-                <option value="every-x-months">Every X months</option>
-              </select>
-              {newTaskRecurrenceType.startsWith("every-") && (
-                <input
-                  type="number"
-                  min="1"
-                  value={newTaskRecurrenceInterval}
-                  onChange={(event) =>
-                    setNewTaskRecurrenceInterval(event.target.value)
-                  }
-                  placeholder="Interval"
-                />
-              )}
-              <span className="helper">
-                {formatRecurrence(
-                  buildRecurrence(
-                    newTaskRecurrenceType,
-                    newTaskRecurrenceInterval,
-                  ),
-                )}
-              </span>
+                New
+              </button>
             </div>
             <ul className="task-list">
               {selectedTasks.length === 0 && (
@@ -898,23 +878,16 @@ function App() {
         {(activeTab === "main" || activeTab === "goals") && (
           <section className="panel">
             <div className="panel-header">
-              <h2>Goals</h2>
-              <p>Track long-term outcomes</p>
-            </div>
-            <div className="input-row">
-              <input
-                type="text"
-                placeholder="New goal"
-                value={newGoalTitle}
-                onChange={(event) => setNewGoalTitle(event.target.value)}
-              />
-              <input
-                type="date"
-                value={newGoalDate}
-                onChange={(event) => setNewGoalDate(event.target.value)}
-              />
-              <button className="primary" onClick={addGoal}>
-                Add
+              <div>
+                <h2>Goals</h2>
+                <p>Track long-term outcomes</p>
+              </div>
+              <button
+                type="button"
+                className="action-button primary"
+                onClick={openNewGoalModal}
+              >
+                New
               </button>
             </div>
             <div className="goal-list">
@@ -976,8 +949,17 @@ function App() {
         {(activeTab === "main" || activeTab === "finance") && (
           <section className="panel finance-panel">
             <div className="panel-header">
-              <h2>Finance</h2>
-              <p>Track cashflow & projections</p>
+              <div>
+                <h2>Finance</h2>
+                <p>Track cashflow & projections</p>
+              </div>
+              <button
+                type="button"
+                className="action-button primary"
+                onClick={openNewFinanceModal}
+              >
+                New
+              </button>
             </div>
             <div className="finance-cards">
               <div>
@@ -992,66 +974,6 @@ function App() {
                 <h4>6 mo projection</h4>
                 <p>{formatCurrency(projection)}</p>
               </div>
-            </div>
-            <div className="input-row">
-              <select
-                value={newFinanceType}
-                onChange={(event) => setNewFinanceType(event.target.value)}
-              >
-                <option value="expense">Expense</option>
-                <option value="income">Income</option>
-              </select>
-              <input
-                type="number"
-                placeholder="Amount"
-                value={newFinanceAmount}
-                onChange={(event) => setNewFinanceAmount(event.target.value)}
-              />
-              <input
-                type="text"
-                placeholder="Category"
-                value={newFinanceCategory}
-                onChange={(event) => setNewFinanceCategory(event.target.value)}
-              />
-              <button className="primary" onClick={addFinanceEntry}>
-                Add
-              </button>
-            </div>
-            <div className="input-row recurrence-row">
-              <select
-                value={newFinanceRecurrenceType}
-                onChange={(event) =>
-                  setNewFinanceRecurrenceType(event.target.value)
-                }
-              >
-                <option value="once">One-time</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-                <option value="every-x-days">Every X days</option>
-                <option value="every-x-weeks">Every X weeks</option>
-                <option value="every-x-months">Every X months</option>
-              </select>
-              {newFinanceRecurrenceType.startsWith("every-") && (
-                <input
-                  type="number"
-                  min="1"
-                  value={newFinanceRecurrenceInterval}
-                  onChange={(event) =>
-                    setNewFinanceRecurrenceInterval(event.target.value)
-                  }
-                  placeholder="Interval"
-                />
-              )}
-              <span className="helper">
-                {formatRecurrence(
-                  buildRecurrence(
-                    newFinanceRecurrenceType,
-                    newFinanceRecurrenceInterval,
-                  ),
-                )}
-              </span>
             </div>
             <ul className="finance-list">
               {financeInstancesForMonth.map((entry) => (
@@ -1091,8 +1013,11 @@ function App() {
             <header className="modal-header">
               <h3>
                 {editModal.type === "task" && "Edit task"}
+                {editModal.type === "new-task" && "New task"}
                 {editModal.type === "goal" && "Edit goal"}
+                {editModal.type === "new-goal" && "New goal"}
                 {editModal.type === "finance" && "Edit finance entry"}
+                {editModal.type === "new-finance" && "New finance entry"}
               </h3>
               <button
                 type="button"
@@ -1169,6 +1094,59 @@ function App() {
                 </>
               )}
 
+              {editModal.type === "new-task" && (
+                <>
+                  <p className="helper">New task for {selectedDate}.</p>
+                  <input
+                    type="text"
+                    placeholder="Task title"
+                    value={newTaskTitle}
+                    onChange={(event) => setNewTaskTitle(event.target.value)}
+                  />
+                  <input
+                    type="time"
+                    value={newTaskTime}
+                    onChange={(event) => setNewTaskTime(event.target.value)}
+                  />
+                  <div className="modal-row">
+                    <select
+                      value={newTaskRecurrenceType}
+                      onChange={(event) =>
+                        setNewTaskRecurrenceType(event.target.value)
+                      }
+                    >
+                      <option value="once">One-time</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="yearly">Yearly</option>
+                      <option value="every-x-days">Every X days</option>
+                      <option value="every-x-weeks">Every X weeks</option>
+                      <option value="every-x-months">Every X months</option>
+                    </select>
+                    {newTaskRecurrenceType.startsWith("every-") && (
+                      <input
+                        type="number"
+                        min="1"
+                        value={newTaskRecurrenceInterval}
+                        onChange={(event) =>
+                          setNewTaskRecurrenceInterval(event.target.value)
+                        }
+                        placeholder="Interval"
+                      />
+                    )}
+                  </div>
+                  <span className="helper">
+                    {formatRecurrence(
+                      buildRecurrence(
+                        newTaskRecurrenceType,
+                        newTaskRecurrenceInterval,
+                      ),
+                    )}
+                  </span>
+                </>
+              )}
+
               {editModal.type === "goal" && (
                 <>
                   <input
@@ -1202,6 +1180,22 @@ function App() {
                         progress: event.target.value,
                       }))
                     }
+                  />
+                </>
+              )}
+
+              {editModal.type === "new-goal" && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="Goal title"
+                    value={newGoalTitle}
+                    onChange={(event) => setNewGoalTitle(event.target.value)}
+                  />
+                  <input
+                    type="date"
+                    value={newGoalDate}
+                    onChange={(event) => setNewGoalDate(event.target.value)}
                   />
                 </>
               )}
@@ -1295,26 +1289,95 @@ function App() {
                   </div>
                 </>
               )}
+
+              {editModal.type === "new-finance" && (
+                <>
+                  <p className="helper">New entry for {selectedDate}.</p>
+                  <div className="modal-row">
+                    <select
+                      value={newFinanceType}
+                      onChange={(event) => setNewFinanceType(event.target.value)}
+                    >
+                      <option value="expense">Expense</option>
+                      <option value="income">Income</option>
+                    </select>
+                    <input
+                      type="number"
+                      placeholder="Amount"
+                      value={newFinanceAmount}
+                      onChange={(event) =>
+                        setNewFinanceAmount(event.target.value)
+                      }
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Category"
+                    value={newFinanceCategory}
+                    onChange={(event) =>
+                      setNewFinanceCategory(event.target.value)
+                    }
+                  />
+                  <div className="modal-row">
+                    <select
+                      value={newFinanceRecurrenceType}
+                      onChange={(event) =>
+                        setNewFinanceRecurrenceType(event.target.value)
+                      }
+                    >
+                      <option value="once">One-time</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="yearly">Yearly</option>
+                      <option value="every-x-days">Every X days</option>
+                      <option value="every-x-weeks">Every X weeks</option>
+                      <option value="every-x-months">Every X months</option>
+                    </select>
+                    {newFinanceRecurrenceType.startsWith("every-") && (
+                      <input
+                        type="number"
+                        min="1"
+                        value={newFinanceRecurrenceInterval}
+                        onChange={(event) =>
+                          setNewFinanceRecurrenceInterval(event.target.value)
+                        }
+                        placeholder="Interval"
+                      />
+                    )}
+                  </div>
+                  <span className="helper">
+                    {formatRecurrence(
+                      buildRecurrence(
+                        newFinanceRecurrenceType,
+                        newFinanceRecurrenceInterval,
+                      ),
+                    )}
+                  </span>
+                </>
+              )}
             </div>
             <div className="modal-actions">
-              <button
-                type="button"
-                className="action-button danger"
-                onClick={() => {
-                  if (editModal.type === "task") {
-                    deleteTask(editModal.entity);
-                  }
-                  if (editModal.type === "goal") {
-                    deleteGoal(editModal.entity.id);
-                  }
-                  if (editModal.type === "finance") {
-                    deleteFinance(editModal.entity);
-                  }
-                  closeModal();
-                }}
-              >
-                Delete
-              </button>
+              {!(editModal.type || "").startsWith("new-") && (
+                <button
+                  type="button"
+                  className="action-button danger"
+                  onClick={() => {
+                    if (editModal.type === "task") {
+                      deleteTask(editModal.entity);
+                    }
+                    if (editModal.type === "goal") {
+                      deleteGoal(editModal.entity.id);
+                    }
+                    if (editModal.type === "finance") {
+                      deleteFinance(editModal.entity);
+                    }
+                    closeModal();
+                  }}
+                >
+                  Delete
+                </button>
+              )}
               <div className="modal-actions-right">
                 <button
                   type="button"
@@ -1328,11 +1391,25 @@ function App() {
                   className="action-button primary"
                   onClick={() => {
                     if (editModal.type === "task") saveTask();
+                    if (editModal.type === "new-task") {
+                      addTask();
+                      closeModal();
+                    }
                     if (editModal.type === "goal") saveGoal();
+                    if (editModal.type === "new-goal") {
+                      addGoal();
+                      closeModal();
+                    }
                     if (editModal.type === "finance") saveFinance();
+                    if (editModal.type === "new-finance") {
+                      addFinanceEntry();
+                      closeModal();
+                    }
                   }}
                 >
-                  Save
+                  {(editModal.type || "").startsWith("new-")
+                    ? "Create"
+                    : "Save"}
                 </button>
               </div>
             </div>
