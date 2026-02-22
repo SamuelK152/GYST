@@ -75,6 +75,19 @@ function App() {
     }
     return "One-time";
   };
+  const formatDayOrdinal = (isoDate) => {
+    const day = Number(isoDate.split("-")[2]);
+    if (Number.isNaN(day)) return isoDate;
+    const mod10 = day % 10;
+    const mod100 = day % 100;
+    let suffix = "th";
+    if (mod100 < 11 || mod100 > 13) {
+      if (mod10 === 1) suffix = "st";
+      if (mod10 === 2) suffix = "nd";
+      if (mod10 === 3) suffix = "rd";
+    }
+    return `${day}${suffix}`;
+  };
   const [selectedDate, setSelectedDate] = useState(toISODate(today));
   const [activeTab, setActiveTab] = useState("main");
 
@@ -124,7 +137,8 @@ function App() {
     {
       id: 1,
       type: "income",
-      amount: 3200,
+      anticipatedAmount: 3200,
+      actualAmount: 3200,
       category: "Salary",
       date: toISODate(new Date(today.getFullYear(), today.getMonth(), 1)),
       recurrence: { type: "monthly" },
@@ -133,7 +147,8 @@ function App() {
     {
       id: 2,
       type: "expense",
-      amount: 860,
+      anticipatedAmount: 860,
+      actualAmount: 860,
       category: "Housing",
       date: toISODate(new Date(today.getFullYear(), today.getMonth(), 5)),
       recurrence: { type: "monthly" },
@@ -142,7 +157,8 @@ function App() {
     {
       id: 3,
       type: "expense",
-      amount: 240,
+      anticipatedAmount: 240,
+      actualAmount: 215,
       category: "Food",
       date: toISODate(new Date(today.getFullYear(), today.getMonth(), 10)),
       recurrence: { type: "weekly" },
@@ -158,12 +174,14 @@ function App() {
   const [newGoalTitle, setNewGoalTitle] = useState("");
   const [newGoalDate, setNewGoalDate] = useState("");
   const [newFinanceType, setNewFinanceType] = useState("expense");
-  const [newFinanceAmount, setNewFinanceAmount] = useState("");
+  const [newFinanceAnticipated, setNewFinanceAnticipated] = useState("");
+  const [newFinanceActual, setNewFinanceActual] = useState("");
   const [newFinanceCategory, setNewFinanceCategory] = useState("");
   const [newFinanceRecurrenceType, setNewFinanceRecurrenceType] =
     useState("once");
   const [newFinanceRecurrenceInterval, setNewFinanceRecurrenceInterval] =
     useState("2");
+  const [financeTab, setFinanceTab] = useState("monthly");
   const [editModal, setEditModal] = useState(null);
   const [taskDraft, setTaskDraft] = useState({
     title: "",
@@ -181,7 +199,8 @@ function App() {
   });
   const [financeDraft, setFinanceDraft] = useState({
     type: "expense",
-    amount: "",
+    anticipatedAmount: "",
+    actualAmount: "",
     category: "",
     date: "",
     recurrenceType: "once",
@@ -237,15 +256,21 @@ function App() {
     const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
     let income = 0;
     let expense = 0;
+    const resolveAmount = (entry) => {
+      const actual = Number(entry.actualAmount || 0);
+      if (actual) return actual;
+      return Number(entry.anticipatedAmount || 0);
+    };
 
     financeEntries.forEach((entry) => {
       for (let day = 1; day <= daysInMonth; day += 1) {
         const date = formatDateParts(year, month, day);
         if (occursOnDate(entry, date)) {
+          const amount = resolveAmount(entry);
           if (entry.type === "income") {
-            income += entry.amount;
+            income += amount;
           } else {
-            expense += entry.amount;
+            expense += amount;
           }
         }
       }
@@ -282,6 +307,39 @@ function App() {
 
     return instances.sort((a, b) => b.date.localeCompare(a.date));
   }, [financeEntries, selectedDate]);
+
+  const filteredFinanceEntries = useMemo(() => {
+    const matchesTab = (recurrence) => {
+      const type = recurrence?.type || "once";
+      if (financeTab === "all") {
+        return true;
+      }
+      if (financeTab === "daily") {
+        return type === "daily" || type === "every-x-days";
+      }
+      if (financeTab === "weekly") {
+        return type === "weekly" || type === "every-x-weeks";
+      }
+      if (financeTab === "monthly") {
+        return (
+          type === "monthly" ||
+          type === "every-x-months" ||
+          type === "once"
+        );
+      }
+      if (financeTab === "one-time") {
+        return type === "once";
+      }
+      if (financeTab === "yearly") {
+        return type === "yearly";
+      }
+      return true;
+    };
+
+    return financeInstancesForMonth.filter((entry) =>
+      matchesTab(entry.recurrence),
+    );
+  }, [financeInstancesForMonth, financeTab]);
 
   const projection = monthlyFinance.net * 6;
 
@@ -385,7 +443,7 @@ function App() {
       isRecurringInstance: task.isRecurringInstance,
     });
   };
-  
+
   const openNewTaskModal = () => {
     setNewTaskTitle("");
     setNewTaskTime("");
@@ -464,7 +522,7 @@ function App() {
       sourceId: goal.id,
     });
   };
-  
+
   const openNewGoalModal = () => {
     setNewGoalTitle("");
     setNewGoalDate("");
@@ -501,13 +559,16 @@ function App() {
   };
 
   const addFinanceEntry = () => {
-    const amount = Number(newFinanceAmount);
-    if (!amount || !newFinanceCategory.trim()) return;
+    const anticipatedAmount = Number(newFinanceAnticipated);
+    const actualAmount = Number(newFinanceActual);
+    if (!anticipatedAmount && !actualAmount) return;
+    if (!newFinanceCategory.trim()) return;
     setFinanceEntries((prev) => [
       {
         id: Date.now(),
         type: newFinanceType,
-        amount,
+        anticipatedAmount: anticipatedAmount || 0,
+        actualAmount: actualAmount || 0,
         category: newFinanceCategory.trim(),
         date: selectedDate,
         recurrence: buildRecurrence(
@@ -518,7 +579,8 @@ function App() {
       },
       ...prev,
     ]);
-    setNewFinanceAmount("");
+    setNewFinanceAnticipated("");
+    setNewFinanceActual("");
     setNewFinanceCategory("");
     setNewFinanceRecurrenceType("once");
     setNewFinanceRecurrenceInterval("2");
@@ -528,7 +590,8 @@ function App() {
     setEditModal({ type: "finance", entity: entry });
     setFinanceDraft({
       type: entry.type,
-      amount: String(entry.amount),
+      anticipatedAmount: String(entry.anticipatedAmount ?? ""),
+      actualAmount: String(entry.actualAmount ?? ""),
       category: entry.category,
       date: entry.date,
       recurrenceType: entry.recurrence?.type || "once",
@@ -537,10 +600,11 @@ function App() {
       isRecurringInstance: entry.isRecurringInstance,
     });
   };
-  
+
   const openNewFinanceModal = () => {
     setNewFinanceType("expense");
-    setNewFinanceAmount("");
+    setNewFinanceAnticipated("");
+    setNewFinanceActual("");
     setNewFinanceCategory("");
     setNewFinanceRecurrenceType("once");
     setNewFinanceRecurrenceInterval("2");
@@ -567,7 +631,9 @@ function App() {
       {
         id: Date.now(),
         type: overrides.type ?? instance.type,
-        amount: overrides.amount ?? instance.amount,
+        anticipatedAmount:
+          overrides.anticipatedAmount ?? instance.anticipatedAmount ?? 0,
+        actualAmount: overrides.actualAmount ?? instance.actualAmount ?? 0,
         category: overrides.category ?? instance.category,
         date: overrides.date ?? instance.date,
         recurrence: { type: "once" },
@@ -578,20 +644,24 @@ function App() {
   };
 
   const saveFinance = () => {
-    const amount = Number(financeDraft.amount);
-    if (!amount || !financeDraft.category.trim() || !financeDraft.date) return;
+    const anticipatedAmount = Number(financeDraft.anticipatedAmount);
+    const actualAmount = Number(financeDraft.actualAmount);
+    if (!anticipatedAmount && !actualAmount) return;
+    if (!financeDraft.category.trim() || !financeDraft.date) return;
     if (financeDraft.isRecurringInstance) {
       addFinanceException(financeDraft.sourceId, financeDraft.date);
       addOneTimeFinanceFromInstance(
         {
           type: financeDraft.type,
-          amount,
+          anticipatedAmount,
+          actualAmount,
           category: financeDraft.category.trim(),
           date: financeDraft.date,
         },
         {
           type: financeDraft.type,
-          amount,
+          anticipatedAmount,
+          actualAmount,
           category: financeDraft.category.trim(),
           date: financeDraft.date,
         },
@@ -605,7 +675,8 @@ function App() {
           ? {
               ...entry,
               type: financeDraft.type,
-              amount,
+              anticipatedAmount,
+              actualAmount,
               category: financeDraft.category.trim(),
               date: financeDraft.date,
               recurrence: buildRecurrence(
@@ -975,12 +1046,65 @@ function App() {
                 <p>{formatCurrency(projection)}</p>
               </div>
             </div>
+            <div className="subtabs" role="tablist" aria-label="Expenses">
+              <button
+                type="button"
+                role="tab"
+                className={`subtab ${financeTab === "all" ? "active" : ""}`}
+                onClick={() => setFinanceTab("all")}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`subtab ${financeTab === "daily" ? "active" : ""}`}
+                onClick={() => setFinanceTab("daily")}
+              >
+                Daily
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`subtab ${financeTab === "weekly" ? "active" : ""}`}
+                onClick={() => setFinanceTab("weekly")}
+              >
+                Weekly
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`subtab ${financeTab === "monthly" ? "active" : ""}`}
+                onClick={() => setFinanceTab("monthly")}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`subtab ${financeTab === "one-time" ? "active" : ""}`}
+                onClick={() => setFinanceTab("one-time")}
+              >
+                One-time
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`subtab ${financeTab === "yearly" ? "active" : ""}`}
+                onClick={() => setFinanceTab("yearly")}
+              >
+                Yearly
+              </button>
+            </div>
             <ul className="finance-list">
-              {financeInstancesForMonth.map((entry) => (
+              {filteredFinanceEntries.length === 0 && (
+                <li className="empty-state">No entries for this tab.</li>
+              )}
+              {filteredFinanceEntries.map((entry) => (
                 <li key={entry.instanceId}>
                   <div>
                     <strong>{entry.category}</strong>
-                    <span>{entry.date}</span>
+                    <span>{formatDayOrdinal(entry.date)}</span>
                     <span className="pill secondary">
                       {formatRecurrence(entry.recurrence)}
                     </span>
@@ -990,7 +1114,10 @@ function App() {
                       className={entry.type === "income" ? "income" : "expense"}
                     >
                       {entry.type === "income" ? "+" : "-"}
-                      {formatCurrency(entry.amount)}
+                      {formatCurrency(entry.anticipatedAmount || 0)}
+                    </span>
+                    <span className="pill secondary">
+                      Actual {formatCurrency(entry.actualAmount || 0)}
                     </span>
                     <button
                       type="button"
@@ -1223,11 +1350,23 @@ function App() {
                     </select>
                     <input
                       type="number"
-                      value={financeDraft.amount}
+                      placeholder="Anticipated"
+                      value={financeDraft.anticipatedAmount}
                       onChange={(event) =>
                         setFinanceDraft((prev) => ({
                           ...prev,
-                          amount: event.target.value,
+                          anticipatedAmount: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      type="number"
+                      placeholder="Actual"
+                      value={financeDraft.actualAmount}
+                      onChange={(event) =>
+                        setFinanceDraft((prev) => ({
+                          ...prev,
+                          actualAmount: event.target.value,
                         }))
                       }
                     />
@@ -1296,17 +1435,27 @@ function App() {
                   <div className="modal-row">
                     <select
                       value={newFinanceType}
-                      onChange={(event) => setNewFinanceType(event.target.value)}
+                      onChange={(event) =>
+                        setNewFinanceType(event.target.value)
+                      }
                     >
                       <option value="expense">Expense</option>
                       <option value="income">Income</option>
                     </select>
                     <input
                       type="number"
-                      placeholder="Amount"
-                      value={newFinanceAmount}
+                      placeholder="Anticipated"
+                      value={newFinanceAnticipated}
                       onChange={(event) =>
-                        setNewFinanceAmount(event.target.value)
+                        setNewFinanceAnticipated(event.target.value)
+                      }
+                    />
+                    <input
+                      type="number"
+                      placeholder="Actual"
+                      value={newFinanceActual}
+                      onChange={(event) =>
+                        setNewFinanceActual(event.target.value)
                       }
                     />
                   </div>
