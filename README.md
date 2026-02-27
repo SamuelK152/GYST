@@ -23,6 +23,12 @@ Gyst is a MERN stack productivity suite that combines task management, goal sett
 2. Create a .env file in the server folder using .env.example.
 3. Start the server, then start the client.
 
+## Deploying the Client to GitHub Pages
+
+- A workflow is included at `.github/workflows/deploy-client-pages.yml`.
+- In GitHub repo settings, open **Pages** and set **Source** to **GitHub Actions**.
+- Push to `main` to trigger deployment.
+
 ## API Endpoints
 
 - GET /api/health
