@@ -2,6 +2,10 @@
 
 Gyst is a MERN stack productivity suite that combines task management, goal setting, daily journaling, and financial tracking with projections.
 
+## GH Pages
+
+https://samuelk152.github.io/GYST/
+
 ## Features
 
 - Calendar-first daily planning
