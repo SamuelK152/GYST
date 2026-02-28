@@ -26,6 +26,7 @@ Required variables:
 
 `CLIENT_ORIGIN` can be a comma-separated list so local and production frontends both work.
 Example: `http://localhost:5173,https://<github-username>.github.io/<repo-name>`
+Use origin values only (no path), e.g. `https://samuelk152.github.io` not `https://samuelk152.github.io/GYST/`.
 
 Quick setup:
 

@@ -10,14 +10,33 @@ import financeRoutes from './routes/financeRoutes.js'
 
 const app = express()
 
-const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean)
+const parseOrigin = (value) => {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+
+    try {
+        return new URL(trimmed).origin
+    } catch {
+        return trimmed.replace(/\/+$/, '')
+    }
+}
+
+const allowedOrigins = new Set(
+    (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
+        .split(',')
+        .map(parseOrigin)
+        .filter(Boolean),
+)
 
 app.use(
     cors({
-        origin: allowedOrigins,
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.has(origin)) {
+                callback(null, true)
+                return
+            }
+            callback(new Error(`Origin not allowed by CORS: ${origin}`))
+        },
     }),
 )
 app.use(express.json())
