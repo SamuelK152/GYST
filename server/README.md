@@ -24,6 +24,18 @@ Required variables:
 - MONGODB_URI
 - CLIENT_ORIGIN
 
+`CLIENT_ORIGIN` can be a comma-separated list so local and production frontends both work.
+Example: `http://localhost:5173,https://<github-username>.github.io/<repo-name>`
+
+Quick setup:
+
+1. `cp .env.example .env` (or create `.env` manually on Windows).
+2. Set `MONGODB_URI` in `.env`.
+3. Run `npm install`.
+4. Run `npm run dev` from the `server` folder.
+
+If you see `EADDRINUSE` on port `5000`, either stop the process already using that port or change `PORT` in `.env`.
+
 ## Routes
 
 - GET /api/health

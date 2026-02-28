@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
 function App() {
@@ -99,96 +99,102 @@ function App() {
     return toISODate(date);
   };
   const goalStartDate = (goal) => goal.startDate || goal.targetDate;
+  const API_BASE_URL = (
+    import.meta.env.VITE_API_URL || "http://localhost:5000"
+  ).replace(/\/$/, "");
+  const normalizeRecurrence = (recurrence) => {
+    if (!recurrence || !recurrence.type || recurrence.type === "once") {
+      return { type: "once" };
+    }
+    if (recurrence.type.startsWith("every-")) {
+      return {
+        type: recurrence.type,
+        interval: Math.max(1, Number(recurrence.interval) || 1),
+      };
+    }
+    return { type: recurrence.type };
+  };
+  const requestJson = async (path, options = {}) => {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status}`);
+    }
+
+    if (response.status === 204) {
+      return null;
+    }
+
+    return response.json();
+  };
+  const normalizeTask = (task) => ({
+    id: task._id || task.id,
+    title: task.title,
+    date: task.date,
+    time: task.time || "Anytime",
+    completed: Boolean(task.completed),
+    recurrence: normalizeRecurrence(task.recurrence),
+    exceptions: task.exceptions || [],
+  });
+  const toTaskPayload = (task) => ({
+    title: task.title,
+    date: task.date,
+    time: task.time || "Anytime",
+    completed: Boolean(task.completed),
+    recurrence: normalizeRecurrence(task.recurrence),
+    exceptions: task.exceptions || [],
+  });
+  const normalizeGoal = (goal) => ({
+    id: goal._id || goal.id,
+    title: goal.title,
+    startDate: goal.startDate || goal.targetDate,
+    targetDate: goal.targetDate,
+    progress: Number(goal.progress || 0),
+  });
+  const normalizeFinance = (entry) => ({
+    id: entry._id || entry.id,
+    type: entry.type,
+    anticipatedAmount: Number(entry.anticipatedAmount ?? entry.amount ?? 0),
+    actualAmount: Number(entry.actualAmount ?? 0),
+    category: entry.category,
+    description: entry.description || entry.notes || "",
+    date: entry.date,
+    recurrence: normalizeRecurrence(entry.recurrence),
+    exceptions: entry.exceptions || [],
+  });
+  const toFinancePayload = (entry) => {
+    const anticipatedAmount = Number(entry.anticipatedAmount) || 0;
+    const actualAmount = Number(entry.actualAmount) || 0;
+    return {
+      type: entry.type,
+      anticipatedAmount,
+      actualAmount,
+      amount: actualAmount || anticipatedAmount || 0,
+      category: entry.category,
+      description: entry.description || "",
+      notes: entry.description || "",
+      date: entry.date,
+      recurrence: normalizeRecurrence(entry.recurrence),
+      exceptions: entry.exceptions || [],
+    };
+  };
   const [selectedDate, setSelectedDate] = useState(toISODate(today));
   const [summaryRange, setSummaryRange] = useState("day");
   const [activeTab, setActiveTab] = useState("main");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
-  const [tasks, setTasks] = useState([
-    {
-      id: 1,
-      title: "Draft weekly plan",
-      date: toISODate(today),
-      time: "09:00",
-      completed: false,
-      recurrence: { type: "once" },
-      exceptions: [],
-    },
-    {
-      id: 2,
-      title: "Gym + mobility",
-      date: toISODate(today),
-      time: "18:30",
-      completed: true,
-      recurrence: { type: "weekly" },
-      exceptions: [],
-    },
-    {
-      id: 3,
-      title: "Review monthly budget",
-      date: toISODate(
-        new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1),
-      ),
-      time: "12:00",
-      completed: false,
-      recurrence: { type: "once" },
-      exceptions: [],
-    },
-  ]);
+  const [tasks, setTasks] = useState([]);
 
-  const [goals, setGoals] = useState([
-    {
-      id: 1,
-      title: "Launch MVP",
-      startDate: "2026-01-15",
-      targetDate: "2026-03-20",
-      progress: 65,
-    },
-    {
-      id: 2,
-      title: "Read 12 books",
-      startDate: "2026-01-01",
-      targetDate: "2026-12-31",
-      progress: 20,
-    },
-  ]);
+  const [goals, setGoals] = useState([]);
 
-  const [financeEntries, setFinanceEntries] = useState([
-    {
-      id: 1,
-      type: "income",
-      anticipatedAmount: 3200,
-      actualAmount: 3200,
-      category: "Salary",
-      description: "Primary paycheck",
-      date: toISODate(new Date(today.getFullYear(), today.getMonth(), 1)),
-      recurrence: { type: "monthly" },
-      exceptions: [],
-    },
-    {
-      id: 2,
-      type: "expense",
-      anticipatedAmount: 860,
-      actualAmount: 860,
-      category: "Housing",
-      description: "Rent payment",
-      date: toISODate(new Date(today.getFullYear(), today.getMonth(), 5)),
-      recurrence: { type: "monthly" },
-      exceptions: [],
-    },
-    {
-      id: 3,
-      type: "expense",
-      anticipatedAmount: 240,
-      actualAmount: 215,
-      category: "Food",
-      description: "Groceries and pantry",
-      date: toISODate(new Date(today.getFullYear(), today.getMonth(), 10)),
-      recurrence: { type: "weekly" },
-      exceptions: [],
-    },
-  ]);
+  const [financeEntries, setFinanceEntries] = useState([]);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskTime, setNewTaskTime] = useState("");
@@ -238,6 +244,34 @@ function App() {
     sourceId: null,
     isRecurringInstance: false,
   });
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadAppData = async () => {
+      try {
+        const [taskData, goalData, financeData] = await Promise.all([
+          requestJson("/api/tasks"),
+          requestJson("/api/goals"),
+          requestJson("/api/finance"),
+        ]);
+
+        if (!isActive) return;
+
+        setTasks(taskData.map(normalizeTask));
+        setGoals(goalData.map(normalizeGoal));
+        setFinanceEntries(financeData.map(normalizeFinance));
+      } catch (error) {
+        console.error("Failed to load app data", error);
+      }
+    };
+
+    loadAppData();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const selectedTasks = useMemo(() => {
     const instances = [];
@@ -615,72 +649,112 @@ function App() {
     return currentYear - 3 + index;
   });
 
-  const addTask = () => {
+  const addTask = async () => {
     if (!newTaskTitle.trim()) return;
-    setTasks((prev) => [
-      {
-        id: Date.now(),
-        title: newTaskTitle.trim(),
-        date: selectedDate,
-        time: newTaskTime || "Anytime",
-        completed: false,
-        recurrence: buildRecurrence(
-          newTaskRecurrenceType,
-          newTaskRecurrenceInterval,
+    try {
+      const createdTask = await requestJson("/api/tasks", {
+        method: "POST",
+        body: JSON.stringify(
+          toTaskPayload({
+            title: newTaskTitle.trim(),
+            date: selectedDate,
+            time: newTaskTime || "Anytime",
+            completed: false,
+            recurrence: buildRecurrence(
+              newTaskRecurrenceType,
+              newTaskRecurrenceInterval,
+            ),
+            exceptions: [],
+          }),
         ),
-        exceptions: [],
-      },
-      ...prev,
-    ]);
-    setNewTaskTitle("");
-    setNewTaskTime("");
-    setNewTaskRecurrenceType("once");
-    setNewTaskRecurrenceInterval("2");
+      });
+      setTasks((prev) => [normalizeTask(createdTask), ...prev]);
+      setNewTaskTitle("");
+      setNewTaskTime("");
+      setNewTaskRecurrenceType("once");
+      setNewTaskRecurrenceInterval("2");
+    } catch (error) {
+      console.error("Failed to add task", error);
+    }
   };
 
-  const addTaskException = (taskId, date) => {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId
-          ? {
-              ...task,
-              exceptions: Array.from(
-                new Set([...(task.exceptions || []), date]),
-              ),
-            }
-          : task,
-      ),
+  const addTaskException = async (taskId, date) => {
+    const sourceTask = tasks.find((task) => task.id === taskId);
+    if (!sourceTask) return;
+
+    const nextExceptions = Array.from(
+      new Set([...(sourceTask.exceptions || []), date]),
     );
+
+    try {
+      const updatedTask = await requestJson(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        body: JSON.stringify(
+          toTaskPayload({
+            ...sourceTask,
+            exceptions: nextExceptions,
+          }),
+        ),
+      });
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === taskId ? normalizeTask(updatedTask) : task,
+        ),
+      );
+    } catch (error) {
+      console.error("Failed to add task exception", error);
+    }
   };
 
-  const addOneTimeTaskFromInstance = (instance, overrides = {}) => {
-    setTasks((prev) => [
-      {
-        id: Date.now(),
-        title: overrides.title ?? instance.title,
-        date: overrides.date ?? instance.date,
-        time: overrides.time ?? instance.time,
-        completed: overrides.completed ?? instance.completed,
-        recurrence: { type: "once" },
-        exceptions: [],
-      },
-      ...prev,
-    ]);
+  const addOneTimeTaskFromInstance = async (instance, overrides = {}) => {
+    try {
+      const createdTask = await requestJson("/api/tasks", {
+        method: "POST",
+        body: JSON.stringify(
+          toTaskPayload({
+            title: overrides.title ?? instance.title,
+            date: overrides.date ?? instance.date,
+            time: overrides.time ?? instance.time,
+            completed: overrides.completed ?? instance.completed,
+            recurrence: { type: "once" },
+            exceptions: [],
+          }),
+        ),
+      });
+      setTasks((prev) => [normalizeTask(createdTask), ...prev]);
+    } catch (error) {
+      console.error("Failed to create one-time task", error);
+    }
   };
 
-  const toggleTask = (task) => {
+  const toggleTask = async (task) => {
     if (task.isRecurringInstance) {
-      addTaskException(task.sourceId, task.date);
-      addOneTimeTaskFromInstance(task, { completed: !task.completed });
+      await addTaskException(task.sourceId, task.date);
+      await addOneTimeTaskFromInstance(task, { completed: !task.completed });
       return;
     }
-    setTasks((prev) =>
-      prev.map((item) =>
-        item.id === task.sourceId
-          ? { ...item, completed: !item.completed }
-          : item,
-      ),
-    );
+
+    const sourceTask = tasks.find((item) => item.id === task.sourceId);
+    if (!sourceTask) return;
+
+    try {
+      const updatedTask = await requestJson(`/api/tasks/${task.sourceId}`, {
+        method: "PATCH",
+        body: JSON.stringify(
+          toTaskPayload({
+            ...sourceTask,
+            completed: !sourceTask.completed,
+          }),
+        ),
+      });
+      setTasks((prev) =>
+        prev.map((item) =>
+          item.id === task.sourceId ? normalizeTask(updatedTask) : item,
+        ),
+      );
+    } catch (error) {
+      console.error("Failed to toggle task", error);
+    }
   };
 
   const closeModal = () => {
@@ -715,11 +789,11 @@ function App() {
     setEditModal({ type: "new-task" });
   };
 
-  const saveTask = () => {
+  const saveTask = async () => {
     if (!taskDraft.title.trim()) return;
     if (taskDraft.isRecurringInstance) {
-      addTaskException(taskDraft.sourceId, selectedDate);
-      addOneTimeTaskFromInstance({
+      await addTaskException(taskDraft.sourceId, selectedDate);
+      await addOneTimeTaskFromInstance({
         title: taskDraft.title.trim(),
         time: taskDraft.time || "Anytime",
         date: selectedDate,
@@ -728,55 +802,92 @@ function App() {
       closeModal();
       return;
     }
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskDraft.sourceId
-          ? {
-              ...task,
-              title: taskDraft.title.trim(),
-              time: taskDraft.time || "Anytime",
-              recurrence: buildRecurrence(
-                taskDraft.recurrenceType,
-                taskDraft.recurrenceInterval,
-              ),
-            }
-          : task,
-      ),
-    );
-    closeModal();
+    const sourceTask = tasks.find((task) => task.id === taskDraft.sourceId);
+    if (!sourceTask) return;
+
+    try {
+      const updatedTask = await requestJson(`/api/tasks/${taskDraft.sourceId}`, {
+        method: "PATCH",
+        body: JSON.stringify(
+          toTaskPayload({
+            ...sourceTask,
+            title: taskDraft.title.trim(),
+            time: taskDraft.time || "Anytime",
+            recurrence: buildRecurrence(
+              taskDraft.recurrenceType,
+              taskDraft.recurrenceInterval,
+            ),
+          }),
+        ),
+      });
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === taskDraft.sourceId ? normalizeTask(updatedTask) : task,
+        ),
+      );
+      closeModal();
+    } catch (error) {
+      console.error("Failed to save task", error);
+    }
   };
 
-  const deleteTask = (task) => {
+  const deleteTask = async (task) => {
     if (task.isRecurringInstance) {
-      addTaskException(task.sourceId, task.date);
+      await addTaskException(task.sourceId, task.date);
       return;
     }
-    setTasks((prev) => prev.filter((item) => item.id !== task.sourceId));
+
+    try {
+      await requestJson(`/api/tasks/${task.sourceId}`, { method: "DELETE" });
+      setTasks((prev) => prev.filter((item) => item.id !== task.sourceId));
+    } catch (error) {
+      console.error("Failed to delete task", error);
+    }
   };
 
-  const addGoal = () => {
+  const addGoal = async () => {
     if (!newGoalTitle.trim() || !newGoalStartDate || !newGoalDate) return;
     if (newGoalStartDate > newGoalDate) return;
-    setGoals((prev) => [
-      {
-        id: Date.now(),
-        title: newGoalTitle.trim(),
-        startDate: newGoalStartDate,
-        targetDate: newGoalDate,
-        progress: 0,
-      },
-      ...prev,
-    ]);
-    setNewGoalTitle("");
-    setNewGoalStartDate("");
-    setNewGoalDate("");
+    try {
+      const createdGoal = await requestJson("/api/goals", {
+        method: "POST",
+        body: JSON.stringify({
+          title: newGoalTitle.trim(),
+          startDate: newGoalStartDate,
+          targetDate: newGoalDate,
+          progress: 0,
+        }),
+      });
+      setGoals((prev) => [normalizeGoal(createdGoal), ...prev]);
+      setNewGoalTitle("");
+      setNewGoalStartDate("");
+      setNewGoalDate("");
+    } catch (error) {
+      console.error("Failed to add goal", error);
+    }
   };
 
-  const updateGoalProgress = (goalId, value) => {
+  const updateGoalProgress = async (goalId, value) => {
     const progress = Math.min(100, Math.max(0, Number(value)));
-    setGoals((prev) =>
-      prev.map((goal) => (goal.id === goalId ? { ...goal, progress } : goal)),
-    );
+    const sourceGoal = goals.find((goal) => goal.id === goalId);
+    if (!sourceGoal) return;
+
+    try {
+      const updatedGoal = await requestJson(`/api/goals/${goalId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...sourceGoal,
+          progress,
+        }),
+      });
+      setGoals((prev) =>
+        prev.map((goal) =>
+          goal.id === goalId ? normalizeGoal(updatedGoal) : goal,
+        ),
+      );
+    } catch (error) {
+      console.error("Failed to update goal progress", error);
+    }
   };
 
   const openGoalModal = (goal) => {
@@ -797,7 +908,7 @@ function App() {
     setEditModal({ type: "new-goal" });
   };
 
-  const saveGoal = () => {
+  const saveGoal = async () => {
     if (
       !goalDraft.title.trim() ||
       !goalDraft.startDate ||
@@ -807,54 +918,71 @@ function App() {
     }
     if (goalDraft.startDate > goalDraft.targetDate) return;
     const progress = Math.min(100, Math.max(0, Number(goalDraft.progress)));
-    setGoals((prev) =>
-      prev.map((goal) =>
-        goal.id === goalDraft.sourceId
-          ? {
-              ...goal,
-              title: goalDraft.title.trim(),
-              startDate: goalDraft.startDate,
-              targetDate: goalDraft.targetDate,
-              progress,
-            }
-          : goal,
-      ),
-    );
-    closeModal();
+
+    try {
+      const updatedGoal = await requestJson(`/api/goals/${goalDraft.sourceId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: goalDraft.title.trim(),
+          startDate: goalDraft.startDate,
+          targetDate: goalDraft.targetDate,
+          progress,
+        }),
+      });
+      setGoals((prev) =>
+        prev.map((goal) =>
+          goal.id === goalDraft.sourceId ? normalizeGoal(updatedGoal) : goal,
+        ),
+      );
+      closeModal();
+    } catch (error) {
+      console.error("Failed to save goal", error);
+    }
   };
 
-  const deleteGoal = (goalId) => {
-    setGoals((prev) => prev.filter((goal) => goal.id !== goalId));
+  const deleteGoal = async (goalId) => {
+    try {
+      await requestJson(`/api/goals/${goalId}`, { method: "DELETE" });
+      setGoals((prev) => prev.filter((goal) => goal.id !== goalId));
+    } catch (error) {
+      console.error("Failed to delete goal", error);
+    }
   };
 
-  const addFinanceEntry = () => {
+  const addFinanceEntry = async () => {
     const anticipatedAmount = Number(newFinanceAnticipated);
     const actualAmount = Number(newFinanceActual);
     if (!anticipatedAmount && !actualAmount) return;
     if (!newFinanceCategory.trim()) return;
-    setFinanceEntries((prev) => [
-      {
-        id: Date.now(),
-        type: newFinanceType,
-        anticipatedAmount: anticipatedAmount || 0,
-        actualAmount: actualAmount || 0,
-        category: newFinanceCategory.trim(),
-        description: newFinanceDescription.trim(),
-        date: selectedDate,
-        recurrence: buildRecurrence(
-          newFinanceRecurrenceType,
-          newFinanceRecurrenceInterval,
+    try {
+      const createdEntry = await requestJson("/api/finance", {
+        method: "POST",
+        body: JSON.stringify(
+          toFinancePayload({
+            type: newFinanceType,
+            anticipatedAmount: anticipatedAmount || 0,
+            actualAmount: actualAmount || 0,
+            category: newFinanceCategory.trim(),
+            description: newFinanceDescription.trim(),
+            date: selectedDate,
+            recurrence: buildRecurrence(
+              newFinanceRecurrenceType,
+              newFinanceRecurrenceInterval,
+            ),
+            exceptions: [],
+          }),
         ),
-        exceptions: [],
-      },
-      ...prev,
-    ]);
-    setNewFinanceAnticipated("");
-    setNewFinanceActual("");
-    setNewFinanceCategory("");
-    setNewFinanceDescription("");
-    setNewFinanceRecurrenceType("once");
-    setNewFinanceRecurrenceInterval("2");
+      });
+      setFinanceEntries((prev) => [normalizeFinance(createdEntry), ...prev]);
+      setNewFinanceAnticipated("");
+      setNewFinanceActual("");
+      setNewFinanceCategory("");
+      setNewFinanceDescription("");
+      setNewFinanceRecurrenceType("once");
+      setNewFinanceRecurrenceInterval("2");
+    } catch (error) {
+      console.error("Failed to add finance entry", error);
+    }
   };
 
   const openFinanceModal = (entry) => {
@@ -884,47 +1012,66 @@ function App() {
     setEditModal({ type: "new-finance" });
   };
 
-  const addFinanceException = (entryId, date) => {
-    setFinanceEntries((prev) =>
-      prev.map((entry) =>
-        entry.id === entryId
-          ? {
-              ...entry,
-              exceptions: Array.from(
-                new Set([...(entry.exceptions || []), date]),
-              ),
-            }
-          : entry,
-      ),
+  const addFinanceException = async (entryId, date) => {
+    const sourceEntry = financeEntries.find((entry) => entry.id === entryId);
+    if (!sourceEntry) return;
+
+    const nextExceptions = Array.from(
+      new Set([...(sourceEntry.exceptions || []), date]),
     );
+
+    try {
+      const updatedEntry = await requestJson(`/api/finance/${entryId}`, {
+        method: "PATCH",
+        body: JSON.stringify(
+          toFinancePayload({
+            ...sourceEntry,
+            exceptions: nextExceptions,
+          }),
+        ),
+      });
+      setFinanceEntries((prev) =>
+        prev.map((entry) =>
+          entry.id === entryId ? normalizeFinance(updatedEntry) : entry,
+        ),
+      );
+    } catch (error) {
+      console.error("Failed to add finance exception", error);
+    }
   };
 
-  const addOneTimeFinanceFromInstance = (instance, overrides = {}) => {
-    setFinanceEntries((prev) => [
-      {
-        id: Date.now(),
-        type: overrides.type ?? instance.type,
-        anticipatedAmount:
-          overrides.anticipatedAmount ?? instance.anticipatedAmount ?? 0,
-        actualAmount: overrides.actualAmount ?? instance.actualAmount ?? 0,
-        category: overrides.category ?? instance.category,
-        description: overrides.description ?? instance.description ?? "",
-        date: overrides.date ?? instance.date,
-        recurrence: { type: "once" },
-        exceptions: [],
-      },
-      ...prev,
-    ]);
+  const addOneTimeFinanceFromInstance = async (instance, overrides = {}) => {
+    try {
+      const createdEntry = await requestJson("/api/finance", {
+        method: "POST",
+        body: JSON.stringify(
+          toFinancePayload({
+            type: overrides.type ?? instance.type,
+            anticipatedAmount:
+              overrides.anticipatedAmount ?? instance.anticipatedAmount ?? 0,
+            actualAmount: overrides.actualAmount ?? instance.actualAmount ?? 0,
+            category: overrides.category ?? instance.category,
+            description: overrides.description ?? instance.description ?? "",
+            date: overrides.date ?? instance.date,
+            recurrence: { type: "once" },
+            exceptions: [],
+          }),
+        ),
+      });
+      setFinanceEntries((prev) => [normalizeFinance(createdEntry), ...prev]);
+    } catch (error) {
+      console.error("Failed to create one-time finance entry", error);
+    }
   };
 
-  const saveFinance = () => {
+  const saveFinance = async () => {
     const anticipatedAmount = Number(financeDraft.anticipatedAmount);
     const actualAmount = Number(financeDraft.actualAmount);
     if (!anticipatedAmount && !actualAmount) return;
     if (!financeDraft.category.trim() || !financeDraft.date) return;
     if (financeDraft.isRecurringInstance) {
-      addFinanceException(financeDraft.sourceId, financeDraft.date);
-      addOneTimeFinanceFromInstance(
+      await addFinanceException(financeDraft.sourceId, financeDraft.date);
+      await addOneTimeFinanceFromInstance(
         {
           type: financeDraft.type,
           anticipatedAmount,
@@ -945,11 +1092,20 @@ function App() {
       closeModal();
       return;
     }
-    setFinanceEntries((prev) =>
-      prev.map((entry) =>
-        entry.id === financeDraft.sourceId
-          ? {
-              ...entry,
+
+    const sourceEntry = financeEntries.find(
+      (entry) => entry.id === financeDraft.sourceId,
+    );
+    if (!sourceEntry) return;
+
+    try {
+      const updatedEntry = await requestJson(
+        `/api/finance/${financeDraft.sourceId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(
+            toFinancePayload({
+              ...sourceEntry,
               type: financeDraft.type,
               anticipatedAmount,
               actualAmount,
@@ -960,21 +1116,37 @@ function App() {
                 financeDraft.recurrenceType,
                 financeDraft.recurrenceInterval,
               ),
-            }
-          : entry,
-      ),
-    );
-    closeModal();
+            }),
+          ),
+        },
+      );
+      setFinanceEntries((prev) =>
+        prev.map((entry) =>
+          entry.id === financeDraft.sourceId
+            ? normalizeFinance(updatedEntry)
+            : entry,
+        ),
+      );
+      closeModal();
+    } catch (error) {
+      console.error("Failed to save finance entry", error);
+    }
   };
 
-  const deleteFinance = (entry) => {
+  const deleteFinance = async (entry) => {
     if (entry.isRecurringInstance) {
-      addFinanceException(entry.sourceId, entry.date);
+      await addFinanceException(entry.sourceId, entry.date);
       return;
     }
-    setFinanceEntries((prev) =>
-      prev.filter((item) => item.id !== entry.sourceId),
-    );
+
+    try {
+      await requestJson(`/api/finance/${entry.sourceId}`, { method: "DELETE" });
+      setFinanceEntries((prev) =>
+        prev.filter((item) => item.id !== entry.sourceId),
+      );
+    } catch (error) {
+      console.error("Failed to delete finance entry", error);
+    }
   };
 
   const formatCurrency = (value) =>

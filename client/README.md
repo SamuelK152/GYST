@@ -28,4 +28,6 @@ Then push to the `main` branch to trigger deployment.
 
 ## Environment
 
-The client expects the API to be available at http://localhost:5000 by default.
+- Local default API URL: `http://localhost:5000`.
+- Override with `VITE_API_URL` (see `.env.example`).
+- For GitHub Pages, set repository variable `VITE_API_URL` to your deployed backend URL.

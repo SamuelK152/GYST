@@ -31,6 +31,8 @@ https://samuelk152.github.io/GYST/
 
 - A workflow is included at `.github/workflows/deploy-client-pages.yml`.
 - In GitHub repo settings, open **Pages** and set **Source** to **GitHub Actions**.
+- In GitHub repo settings, add repository variable `VITE_API_URL` with your deployed backend URL.
+- Deploy the server separately (GitHub Pages hosts static frontend only).
 - Push to `main` to trigger deployment.
 
 ## API Endpoints

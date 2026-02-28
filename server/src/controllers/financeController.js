@@ -10,6 +10,13 @@ export const createFinanceEntry = async (req, res) => {
     res.status(201).json(entry)
 }
 
+export const updateFinanceEntry = async (req, res) => {
+    const entry = await FinanceEntry.findByIdAndUpdate(req.params.id, req.body, {
+        new: true,
+    })
+    res.json(entry)
+}
+
 export const deleteFinanceEntry = async (req, res) => {
     await FinanceEntry.findByIdAndDelete(req.params.id)
     res.status(204).end()
