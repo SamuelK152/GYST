@@ -1,16 +1,15 @@
-import dotenv from 'dotenv';
+import 'dotenv/config';
+
 import app from './app.js';
 import { connectDb } from './config/db.js';
 
-dotenv.config();
-
-const PORT = process.env.PORT || 4000;
-
 async function start() {
+  const port = Number(process.env.PORT || 4000);
+
   try {
     await connectDb();
-    app.listen(PORT, () => {
-      console.log(`Life OS API running on http://localhost:${PORT}`);
+    app.listen(port, () => {
+      console.log(`Server listening on port ${port}`);
     });
   } catch (error) {
     console.error('Failed to start API', error);
